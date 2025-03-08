@@ -1,0 +1,10 @@
+[package]
+name = "legrillon"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fltk = { version = "1.5.4", features = ["fltk-bundled"] }
+fltk-theme = "0.7.5"
+reqwest = "0.12.12"
+tokio = { version = "1.43.0", features = ["full"] }
