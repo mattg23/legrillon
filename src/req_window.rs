@@ -99,7 +99,7 @@ impl RequestWindow {
 
         if let Some(wnd) = wnd{
             uri_input.set_value(wnd.uri.as_str());
-            if let Some(item) = verb_choice.find_item(&wnd.method.as_str()){
+            if let Some(item) = verb_choice.find_item(wnd.method.as_str()){
                 verb_choice.set_item(&item);
             }
             req_params.set(wnd);
