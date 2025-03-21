@@ -1,22 +1,21 @@
-use std::str::FromStr;
+use std::{rc::Rc, str::FromStr};
 
 use fltk::{
     app, button,
     enums::{self, Event},
     frame, group, input,
     prelude::*,
-    text::{self, TextBuffer},
+    text::{self},
     window::{self, DoubleWindow},
 };
 use reqwest::Method;
 
-use crate::{next_window_id, AppWindow, GlobalAppMsg, HasId};
+use crate::{AppWindow, GlobalAppMsg, HasId, next_window_id, req_params::RequestParamsCtrl};
 
 pub struct RequestWindow {
     uri: String,
-    headers: Vec<(String, String)>,
+    param_ctrl: Rc<RequestParamsCtrl>,
     method: reqwest::Method,
-    body_buf: TextBuffer,
     global: app::Sender<GlobalAppMsg>,
     id: usize,
     window: DoubleWindow,
@@ -51,7 +50,6 @@ impl RequestWindow {
             .with_size(1200, 800)
             .with_label("Le Grillon");
 
-        let buf = text::TextBuffer::default();
         let result_buf = text::TextBuffer::default();
 
         let mut col = group::Flex::default_fill().column();
@@ -78,12 +76,9 @@ impl RequestWindow {
         row.end();
         col.fixed(&row, 32);
         let row = group::Flex::default_fill().row();
-        let mut body = text::TextEditor::default();
 
-        body.set_linenumber_width(12 * 3);
+        let req_params = RequestParamsCtrl::new();
 
-        body.set_buffer(buf.clone());
-        body.set_text_font(enums::Font::Courier);
         let mut result = text::TextDisplay::default();
 
         result.set_linenumber_width(12 * 3);
@@ -117,25 +112,13 @@ impl RequestWindow {
         let ptr_verb = verb_choice.clone();
         let ptr_result_text = result.clone();
 
-        let mut buf2 = buf.clone();
-        let buf3 = buf.clone();
-
-        buf2.add_modify_callback(move |_, i, d, _, _| {
-            if i > 0 || d > 0 {
-                let mut body = body.clone();
-                let buf = buf.clone();
-                let lc = body.count_lines(0, buf.length(), false);
-                let lc_width = ((f64::log10(lc as f64) as i64) + 1) * 12;
-                let lc_width = lc_width.max(3 * 12);
-                body.set_linenumber_width(lc_width as i32);
-            }
-        });
-
-        let buf = buf3.clone();
+        let params_ptr = Rc::new(req_params);
+        let params_ptr_run_cl = params_ptr.clone();
 
         runbtn.set_callback(move |_| {
             let uri = uri_input.value();
-            let body = buf.text();
+            let body = params_ptr_run_cl.get_body();
+            let headers = params_ptr_run_cl.get_headers();
 
             let verb =
                 reqwest::Method::from_str(ptr_verb.choice().unwrap_or("GET".to_string()).as_str())
@@ -151,8 +134,10 @@ impl RequestWindow {
 
             tokio::spawn(async move {
                 let client = reqwest::Client::new();
-                let start = std::time::Instant::now();
-                match client.request(verb, uri).body(body).send().await {
+                let start = std::time::Instant::now();                
+                let req_builder = client.request(verb, uri).body(body).headers(headers);
+                println!("{req_builder:?}");
+                match req_builder.send().await {
                     Ok(resp) => {
                         // set result
                         let resp_time = std::time::Instant::now();
@@ -198,12 +183,11 @@ impl RequestWindow {
 
         Self {
             uri: String::new(),
-            headers: vec![],
             method: reqwest::Method::GET,
-            body_buf: buf3.clone(),
             global: s,
             id,
             window: win,
+            param_ctrl: params_ptr,
         }
     }
 }

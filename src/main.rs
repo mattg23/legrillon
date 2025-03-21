@@ -5,6 +5,7 @@ use fltk_theme::WidgetTheme;
 use req_window::RequestWindow;
 
 mod controls;
+mod req_params;
 mod req_window;
 
 #[derive(Clone, Copy, Debug)]

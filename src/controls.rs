@@ -5,7 +5,7 @@ use fltk::{
     window::{self, SingleWindow},
 };
 
-use crate::{next_window_id, AppWindow, GlobalAppMsg, HasId};
+use crate::{AppWindow, GlobalAppMsg, HasId, next_window_id};
 
 pub struct MainControls {
     global_msg_sender: Sender<GlobalAppMsg>,
