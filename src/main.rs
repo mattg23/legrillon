@@ -1,17 +1,26 @@
-use std::{collections::BTreeMap, sync::atomic::AtomicUsize};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, atomic::AtomicUsize},
+};
 
+use controls::MainControls;
+use db::{LeGrillonDb, OpenWindow};
 use fltk::app;
 use fltk_theme::WidgetTheme;
 use req_window::RequestWindow;
 
 mod controls;
+mod db;
 mod req_params;
 mod req_window;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 enum GlobalAppMsg {
-    OpenWindow,
+    OpenEmptyWindow,
+    Restore(OpenWindow),
+    SaveWindowState(OpenWindow),
     CloseWindow(usize),
+    CloseApp,
 }
 
 pub(crate) trait HasId {
@@ -31,11 +40,13 @@ fn next_window_id() -> usize {
 struct LeGrillon {
     app: app::App,
     receiver: app::Receiver<GlobalAppMsg>,
+    ctrls: MainControls,
     windows: std::collections::BTreeMap<usize, Box<dyn AppWindow>>,
+    db: Arc<LeGrillonDb>,
 }
 
 impl LeGrillon {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
         let app = app::App::default();
         let (s, receiver) = app::channel();
         app::set_font_size(18);
@@ -44,24 +55,37 @@ impl LeGrillon {
 
         let ctrls = crate::controls::MainControls::new(s);
 
-        let mut window_map: BTreeMap<usize, Box<dyn AppWindow>> = std::collections::BTreeMap::new();
-        window_map.insert(ctrls.id(), Box::new(ctrls));
+        let window_map: BTreeMap<usize, Box<dyn AppWindow>> = std::collections::BTreeMap::new();
+
+        let db = Arc::new(LeGrillonDb::new().await);
 
         LeGrillon {
             app,
             receiver,
+            ctrls,
             windows: window_map,
+            db,
         }
     }
 
     pub fn run(&mut self) {
+        LeGrillonDb::restore(self.db.clone());
+
         while self.app.wait() {
             if let Some(msg) = self.receiver.recv() {
-                println!("{msg:?}");
+                println!("MAIN::RUN:: {msg:?}");
                 match msg {
-                    GlobalAppMsg::OpenWindow => self.open(),
+                    GlobalAppMsg::OpenEmptyWindow => self.open(None),
                     GlobalAppMsg::CloseWindow(id) => self.close(id),
+                    GlobalAppMsg::SaveWindowState(_) => (),
+                    GlobalAppMsg::Restore(ref open_window) => self.open(Some(open_window)),
+                    GlobalAppMsg::CloseApp => {
+                        for wnd in self.windows.values_mut() {
+                            wnd.close();
+                        }
+                    }
                 }
+                LeGrillonDb::handle(self.db.clone(), msg);
             }
         }
     }
@@ -72,13 +96,13 @@ impl LeGrillon {
         }
     }
 
-    fn open(&mut self) {
-        let req_win = RequestWindow::new();
+    fn open(&mut self, wnd: Option<&OpenWindow>) {
+        let req_win = RequestWindow::new(wnd);
         self.windows.insert(req_win.id(), Box::new(req_win));
     }
 }
 
 #[tokio::main]
 async fn main() {
-    LeGrillon::new().run();
+    LeGrillon::new().await.run();
 }

@@ -1,6 +1,8 @@
 use fltk::{
     app::Sender,
-    button, group, image,
+    button,
+    enums::Event,
+    group, image,
     prelude::*,
     window::{self, SingleWindow},
 };
@@ -33,9 +35,9 @@ impl MainControls {
 
         let mut new_req_window_button = button::Button::default().with_label("New 🦗");
         new_req_window_button.set_label_size(32);
-        let p_sender = self.global_msg_sender;
+        let p_sender = self.global_msg_sender.clone();
         new_req_window_button.set_callback(move |_| {
-            p_sender.send(GlobalAppMsg::OpenWindow);
+            p_sender.send(GlobalAppMsg::OpenEmptyWindow);
         });
         row.end();
 
@@ -48,6 +50,15 @@ impl MainControls {
         } else {
             print!("IMGERR= {loadimg:?}");
         }
+        let p_sender = self.global_msg_sender.clone();
+        ctrl_window.handle(move |_, e| {
+            if e == Event::Hide {
+                p_sender.send(GlobalAppMsg::CloseApp);
+                true
+            } else {
+                false
+            }
+        });
 
         self.window_ptr = Some(ctrl_window);
     }

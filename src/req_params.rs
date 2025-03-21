@@ -89,4 +89,12 @@ impl RequestParamsCtrl {
 
         possibles
     }
+
+    pub fn set(&mut self, wnd: &crate::db::OpenWindow) {
+        self.body_buf.set_text(&wnd.body);
+
+        for (n, v) in wnd.headers.0.iter() {
+            self.headers_buf.append(format!("{v}: {n} \n").as_str());
+        }
+    }
 }

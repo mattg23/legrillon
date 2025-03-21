@@ -10,7 +10,7 @@ use fltk::{
 };
 use reqwest::Method;
 
-use crate::{AppWindow, GlobalAppMsg, HasId, next_window_id, req_params::RequestParamsCtrl};
+use crate::{db::OpenWindow, next_window_id, req_params::RequestParamsCtrl, AppWindow, GlobalAppMsg, HasId};
 
 pub struct RequestWindow {
     uri: String,
@@ -43,8 +43,8 @@ pub fn human_bytes<T: Into<f64>>(bytes: T) -> String {
 }
 
 impl RequestWindow {
-    pub fn new() -> Self {
-        let id = next_window_id();
+    pub fn new(wnd: Option<&OpenWindow>) -> Self {
+        let id = wnd.map_or(next_window_id(), |f| f.id as usize);
 
         let mut win = window::DoubleWindow::default()
             .with_size(1200, 800)
@@ -67,7 +67,7 @@ impl RequestWindow {
         let uri_label = frame::Frame::default().with_label("URI:");
 
         row.fixed(&uri_label, 64);
-        let uri_input = input::Input::default();
+        let mut uri_input = input::Input::default();
         let mut runbtn = button::Button::default().with_label("🦗");
         runbtn.set_label_size(32);
 
@@ -77,7 +77,7 @@ impl RequestWindow {
         col.fixed(&row, 32);
         let row = group::Flex::default_fill().row();
 
-        let req_params = RequestParamsCtrl::new();
+        let mut req_params = RequestParamsCtrl::new();
 
         let mut result = text::TextDisplay::default();
 
@@ -96,11 +96,23 @@ impl RequestWindow {
         win.end();
         win.make_resizable(true);
         win.show();
+
+        if let Some(wnd) = wnd{
+            uri_input.set_value(wnd.uri.as_str());
+            if let Some(item) = verb_choice.find_item(&wnd.method.as_str()){
+                verb_choice.set_item(&item);
+            }
+            req_params.set(wnd);
+        }
+
+        
+
+
         let (s, _) = app::channel();
-        let p_sender = s;
+        let p_sender = s.clone();
         win.handle(move |_, e| {
             if e == Event::Hide {
-                println!("WINID={id}| {e:?}");
+                println!("HANDLE WINDOW EVENT| (RequestWindow) | WINID={id}| {e:?}");
                 p_sender.send(GlobalAppMsg::CloseWindow(id));
                 return true;
             }
@@ -115,6 +127,7 @@ impl RequestWindow {
         let params_ptr = Rc::new(req_params);
         let params_ptr_run_cl = params_ptr.clone();
 
+        let p_sender = s.clone();
         runbtn.set_callback(move |_| {
             let uri = uri_input.value();
             let body = params_ptr_run_cl.get_body();
@@ -124,6 +137,8 @@ impl RequestWindow {
                 reqwest::Method::from_str(ptr_verb.choice().unwrap_or("GET".to_string()).as_str())
                     .unwrap_or(Method::GET);
 
+            
+
             let mut result = result_buf.clone();
             let inner_btn_ptr = btn_ptr.clone();
             let mut inner_status_ptr = status.clone();
@@ -132,11 +147,22 @@ impl RequestWindow {
 
             status.set_label(format!("Sending {verb} request...").as_str());
 
+            let save_window = GlobalAppMsg::SaveWindowState(OpenWindow {
+id: id as i32,
+method: verb.to_string(),
+uri: uri.clone(),
+body: body.clone(),
+path: "".to_string(),
+query: "".to_string(),
+headers: sqlx::types::Json(headers.iter().map(|f| (f.0.to_string(), f.1.to_str().unwrap().to_string())).collect())
+            });
+
+            p_sender.send(save_window);
+
             tokio::spawn(async move {
                 let client = reqwest::Client::new();
                 let start = std::time::Instant::now();                
                 let req_builder = client.request(verb, uri).body(body).headers(headers);
-                println!("{req_builder:?}");
                 match req_builder.send().await {
                     Ok(resp) => {
                         // set result
@@ -199,7 +225,7 @@ impl HasId for RequestWindow {
 }
 
 impl AppWindow for RequestWindow {
-    fn close(&mut self) {
+    fn close(&mut self) {        
         self.window.hide();
     }
 }
