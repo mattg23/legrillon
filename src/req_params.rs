@@ -94,7 +94,7 @@ impl RequestParamsCtrl {
         self.body_buf.set_text(&wnd.body);
 
         for (n, v) in wnd.headers.0.iter() {
-            self.headers_buf.append(format!("{v}: {n} \n").as_str());
+            self.headers_buf.append(format!("{n}:{v}\n").as_str());
         }
     }
 }
