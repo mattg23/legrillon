@@ -3,7 +3,7 @@ use std::sync::Arc;
 use fltk::app::{self, Sender};
 use sqlx::{Pool, Sqlite, SqlitePool, migrate::MigrateDatabase};
 
-use crate::GlobalAppMsg;
+use crate::{GlobalAppMsg, WINDOW_ID_COUNTER};
 
 #[derive(Debug, sqlx::FromRow)]
 struct SentRequest {
@@ -79,11 +79,19 @@ impl LeGrillonDb {
 
         println!("{wins:?}");
 
+        let mut max_id = 0;
+
         if let Ok(wins) = wins {
             for w in wins {
+                if w.id > max_id {
+                    max_id = w.id;
+                }
+
                 self.global.send(GlobalAppMsg::Restore(w));
             }
         }
+
+        WINDOW_ID_COUNTER.fetch_max(max_id as usize, std::sync::atomic::Ordering::SeqCst);
     }
 
     async fn handle_msg(&self, msg: GlobalAppMsg) {
